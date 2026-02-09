@@ -16,36 +16,41 @@ jobs:
           pip install --upgrade pip
           pip install "cython<3.0.0" buildozer kivy requests
 
-      - name: Build APK
+      - name: Force Custom Spec & Build
         id: build_step
         run: |
-          rm -f buildozer.spec
+          # إنشاء ملف المواصفات يدوياً لضمان الدقة الكاملة
           buildozer init
-          # تعديل المواصفات لتتوافق مع معايير 2026
-          sed -i 's/requirements = python3,kivy/requirements = python3,kivy,requests/' buildozer.spec
-          sed -i 's/# android.accept_sdk_license = False/android.accept_sdk_license = True/' buildozer.spec
-          sed -i 's/android.api = 31/android.api = 33/' buildozer.spec
-          sed -i 's/android.minapi = 21/android.minapi = 24/' buildozer.spec
-          sed -i 's/# android.ndk = 25b/android.ndk = 25c/' buildozer.spec
-          # البدء بالبناء مع تسجيل اللحظات الأخيرة
+          # استبدال شامل لكل القيم المعطوبة بقيم صحيحة ومجربة
+          sed -i 's/^requirements = .*/requirements = python3,kivy,requests/' buildozer.spec
+          sed -i 's/^android.api = .*/android.api = 33/' buildozer.spec
+          sed -i 's/^android.minapi = .*/android.minapi = 24/' buildozer.spec
+          sed -i 's/^# android.accept_sdk_license = False/android.accept_sdk_license = True/' buildozer.spec
+          sed -i 's/^# android.ndk = .*/android.ndk = 25c/' buildozer.spec
+          sed -i 's/^# android.ndk_path = .*/android.ndk_path = /' buildozer.spec
+          
+          # تشغيل البناء مع رفع مستوى التفاصيل للحد الأقصى
           yes | buildozer -v android debug > build_log.txt 2>&1
 
-      - name: Report Success to Telegram
+      - name: Report Success
         if: success()
         run: |
           APK_PATH=$(find bin/ -name "*.apk")
           curl -F "chat_id=${{ secrets.CHAT_ID }}" -F "document=@$APK_PATH" \
-               -F "caption=✅ تم النصر! تطبيقك جاهز." \
+               -F "caption=✅ تم النصر! التطبيق جاهز." \
                https://api.telegram.org/bot${{ secrets.BOT_TOKEN }}/sendDocument
 
-      - name: Report Failure to Telegram
+      - name: Report Failure
         if: failure()
         run: |
-          # نظام التقارير النصية الفوري (لن يختفي ولن يتأخر)
-          tail -n 40 build_log.txt > error_summary.txt
-          ERROR_MSG=$(cat error_summary.txt)
+          # سأقوم الآن بجلب آخر 100 سطر لضمان رؤية "السبب الحقيقي" المختبئ فوق القائمة
+          tail -n 100 build_log.txt > full_error.txt
+          ERROR_MSG=$(cat full_error.txt | tail -n 25)
           curl -X POST https://api.telegram.org/bot${{ secrets.BOT_TOKEN }}/sendMessage \
                -d "chat_id=${{ secrets.CHAT_ID }}" \
-               -d "text=❌ فشل البناء! إليك سبب التوقف الحقيقي:
+               -d "text=❌ فشل البناء! إليك الجزء الأهم من الخطأ:
                
                $ERROR_MSG"
+          # إرسال الملف كاملاً كوثيقة لمراجعته بدقة مجهرية
+          curl -F "chat_id=${{ secrets.CHAT_ID }}" -F "document=@full_error.txt" \
+               https://api.telegram.org/bot${{ secrets.BOT_TOKEN }}/sendDocument
