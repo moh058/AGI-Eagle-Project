@@ -8,24 +8,33 @@ jobs:
     runs-on: ubuntu-22.04
     steps:
       - uses: actions/checkout@v4
+
       - name: Setup Python
         uses: actions/setup-python@v5
         with:
           python-version: "3.9"
+
       - name: Install Dependencies
         run: |
-          pip install buildozer cython==0.29.33 kivy requests
+          sudo apt update
+          sudo apt install -y build-essential git ffmpeg libsdl2-dev libsdl2-image-dev libsdl2-mixer-dev libsdl2-ttf-dev libportmidi-dev libswscale-dev libavformat-dev libavcodec-dev zlib1g-dev openjdk-17-jdk
+          pip install --upgrade pip
+          pip install "cython<3.0.0" buildozer kivy requests
+
       - name: Build APK
         run: |
+          rm -f buildozer.spec
           buildozer init
           sed -i 's/requirements = python3,kivy/requirements = python3,kivy,requests/' buildozer.spec
           sed -i 's/# android.accept_sdk_license = False/android.accept_sdk_license = True/' buildozer.spec
+          # أمر بناء قوي يتجاوز مشاكل الذاكرة
           yes | buildozer -v android debug
+
       - name: Send to Telegram
+        if: success()
         run: |
           APK_PATH=$(find bin/ -name "*.apk")
           curl -v -F "chat_id=${{ secrets.CHAT_ID }}" \
                -F "document=@$APK_PATH" \
-               -F "caption=🚀 تم بناء تطبيقك بنجاح!" \
+               -F "caption=🚀 تم النصر! تطبيقك جاهز." \
                https://api.telegram.org/bot${{ secrets.BOT_TOKEN }}/sendDocument
-
