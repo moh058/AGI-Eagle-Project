@@ -9,30 +9,39 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: System Init
+      - name: System Setup
         run: |
           sudo apt update
           sudo apt install -y build-essential git openjdk-17-jdk python3-dev zip unzip
           pip install --upgrade pip
           pip install "cython<3.0.0" buildozer kivy requests
 
-      - name: Build Engine
+      - name: Build APK
+        id: build_step
         run: |
           rm -f buildozer.spec
           buildozer init
-          # تعديلات ذكية لتقليل وقت البناء وتجنب الفشل
           sed -i 's/requirements = python3,kivy/requirements = python3,kivy,requests/' buildozer.spec
           sed -i 's/# android.accept_sdk_license = False/android.accept_sdk_license = True/' buildozer.spec
-          sed -i 's/p4a.branch = master/p4a.branch = develop/' buildozer.spec
-          # أمر البناء السريع
-          yes | buildozer -v android debug
+          # محاولة البناء وحفظ النتيجة
+          yes | buildozer -v android debug > build_log.txt 2>&1
 
-      - name: Send to Telegram
-        if: always() # سيحاول الإرسال حتى لو فشل ليعلمك بالنتيجة
+      - name: Report Success to Telegram
+        if: success()
         run: |
-          APK_PATH=$(find bin/ -name "*.apk" || echo "none")
-          if [ "$APK_PATH" != "none" ]; then
-            curl -F "chat_id=${{ secrets.CHAT_ID }}" -F "document=@$APK_PATH" https://api.telegram.org/bot${{ secrets.BOT_TOKEN }}/sendDocument
-          else
-            curl -X POST https://api.telegram.org/bot${{ secrets.BOT_TOKEN }}/sendMessage -d "chat_id=${{ secrets.CHAT_ID }}&text=❌ فشل البناء في انتاج APK. تحقق من السجلات."
-          fi
+          APK_PATH=$(find bin/ -name "*.apk")
+          curl -F "chat_id=${{ secrets.CHAT_ID }}" -F "document=@$APK_PATH" \
+               -F "caption=✅ تم النصر! التطبيق جاهز." \
+               https://api.telegram.org/bot${{ secrets.BOT_TOKEN }}/sendDocument
+
+      - name: Report Failure to Telegram
+        if: failure()
+        run: |
+          # استخراج آخر 20 سطر من الخطأ لإرسالها
+          tail -n 20 build_log.txt > error_summary.txt
+          ERROR_MSG=$(cat error_summary.txt)
+          curl -X POST https://api.telegram.org/bot${{ secrets.BOT_TOKEN }}/sendMessage \
+               -d "chat_id=${{ secrets.CHAT_ID }}" \
+               -d "text=❌ فشل البناء! إليك ملخص الخطأ:
+               
+               $ERROR_MSG"
