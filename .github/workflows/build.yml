@@ -1,48 +1,21 @@
-name: AGI-Telegram-Build
+name: AGI-Test-Connection
 on:
   push:
   workflow_dispatch:
 
 jobs:
-  build:
-    runs-on: ubuntu-22.04
+  test_bot:
+    runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-
-      - name: Start Notification
+      - name: Test Telegram Pulse
         run: |
-          curl -X POST https://api.telegram.org/bot${{ secrets.BOT_TOKEN }}/sendMessage \
+          # محاولة إرسال رسالة تجريبية بسيطة جداً
+          RESPONSE=$(curl -s -w "%{http_code}" -X POST https://api.telegram.org/bot${{ secrets.BOT_TOKEN }}/sendMessage \
                -d "chat_id=${{ secrets.CHAT_ID }}" \
-               -d "text=🚀 إقلاع المحرك! بدأ البناء الآن على GitHub. انتظر النتيجة..."
-
-      - name: System Setup
-        id: setup
-        continue-on-error: true
-        run: |
-          sudo apt update
-          sudo apt install -y build-essential git openjdk-17-jdk python3-dev zip unzip libncurses5 libstdc++6
-          pip install --upgrade pip
-          pip install "cython<3.0.0" buildozer kivy requests
-
-      - name: Hard-Reset Spec & Build
-        id: build_step
-        continue-on-error: true
-        run: |
-          rm -f buildozer.spec
-          buildozer init
-          sed -i 's/^requirements = .*/requirements = python3,kivy,requests/' buildozer.spec
-          sed -i 's/^android.api = .*/android.api = 33/' buildozer.spec
-          sed -i 's/^android.minapi = .*/android.minapi = 24/' buildozer.spec
-          sed -i 's/^# android.accept_sdk_license = False/android.accept_sdk_license = True/' buildozer.spec
-          yes | buildozer -v android debug > full_log.txt 2>&1
-
-      - name: Mandatory Delivery
-        if: always()
-        run: |
-          APK_PATH=$(find bin/ -name "*.apk" || echo "")
-          if [ -f "$APK_PATH" ]; then
-            curl -F "chat_id=${{ secrets.CHAT_ID }}" -F "document=@$APK_PATH" -F "caption=✅ تم النصر! التطبيق جاهز." https://api.telegram.org/bot${{ secrets.BOT_TOKEN }}/sendDocument
-          else
-            [ -f full_log.txt ] && tail -n 100 full_log.txt > final_error.txt || echo "No log found" > final_error.txt
-            curl -F "chat_id=${{ secrets.CHAT_ID }}" -F "document=@final_error.txt" -F "caption=❌ فشل تقني. حلل السجل المرفق." https://api.telegram.org/bot${{ secrets.BOT_TOKEN }}/sendDocument
+               -d "text=📡 اختبار الاتصال: المحرك يتحدث! إذا وصلت هذه الرسالة، فإن الإعدادات سليمة.")
+          
+          echo "Telegram Response Code: $RESPONSE"
+          if [[ "$RESPONSE" != *"200"* ]]; then
+            echo "Error: Could not send to Telegram. Check your Secrets!"
+            exit 1
           fi
